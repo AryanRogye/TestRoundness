@@ -1,0 +1,17 @@
+# macOS
+.DS_Store
+
+# Xcode
+DerivedData/
+.derivedData/
+build/
+*.xcuserstate
+xcuserdata/
+
+# Swift Package Manager
+.build/
+Package.resolved
+
+# User-local settings
+*.swp
+*.lock
