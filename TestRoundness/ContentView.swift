@@ -13,6 +13,7 @@ struct ContentView: View {
     @State private var pendingEditSnapshot: RoundnessDocumentState?
     @State private var isImporterPresented = false
     @State private var importError: String?
+    @AppStorage("swiftUIScale") private var swiftUIScale = 3.0
 
     private let imageStore = LastImageStore()
 
@@ -22,6 +23,7 @@ struct ContentView: View {
             overlays: $overlays,
             selectedOverlayID: $selectedOverlayID,
             selectedOverlay: selectedOverlayBinding,
+            swiftUIScale: $swiftUIScale,
             canUndo: !undoStack.isEmpty,
             canRedo: !redoStack.isEmpty,
             onImportImage: { isImporterPresented = true },
@@ -29,6 +31,8 @@ struct ContentView: View {
             onAddOverlay: addOverlay,
             onDeleteSelectedOverlay: deleteSelectedOverlay,
             onResetSelectedOverlay: resetSelectedOverlay,
+            onToggleOverlayVisibility: toggleOverlayVisibility,
+            onShowAllOverlays: showAllOverlays,
             onBeginOverlayEdit: beginOverlayEdit,
             onEndOverlayEdit: endOverlayEdit,
             onUndo: undo,
@@ -197,7 +201,7 @@ struct ContentView: View {
 
     private func addOverlay() {
         commitDocumentMutation {
-            var overlay = OverlayRectangle.makeDefault(number: overlays.count + 1)
+            var overlay = OverlayRectangle.makeDefault(number: nextOverlayNumber)
 
             if let selectedOverlay = overlays.first(where: { $0.id == selectedOverlayID }) {
                 overlay.settings = selectedOverlay.settings
@@ -236,6 +240,25 @@ struct ContentView: View {
 
         commitDocumentMutation {
             overlays[selectedIndex].settings.normalizedRect = CGRect(x: 0.2, y: 0.2, width: 0.6, height: 0.6)
+        }
+    }
+
+    private func toggleOverlayVisibility(_ overlayID: UUID) {
+        guard let overlayIndex = overlays.firstIndex(where: { $0.id == overlayID }) else { return }
+
+        commitDocumentMutation {
+            overlays[overlayIndex].isVisible.toggle()
+            selectedOverlayID = overlayID
+        }
+    }
+
+    private func showAllOverlays() {
+        guard overlays.contains(where: { !$0.isVisible }) else { return }
+
+        commitDocumentMutation {
+            for index in overlays.indices {
+                overlays[index].isVisible = true
+            }
         }
     }
 
@@ -322,18 +345,37 @@ struct ContentView: View {
         }
     }
 
+    private var nextOverlayNumber: Int {
+        let usedNumbers = overlays.compactMap { overlay in
+            overlay.name
+                .split(separator: " ")
+                .last
+                .flatMap { Int($0) }
+        }
+
+        return (usedNumbers.max() ?? overlays.count) + 1
+    }
+
     private func shiftedRect(_ rect: CGRect) -> CGRect {
-        let offset: CGFloat = 0.04
-        var shifted = rect.offsetBy(dx: offset, dy: offset)
+        let offset = CGFloat((overlays.count % 5) + 1) * 0.035
+        let candidates = [
+            rect.offsetBy(dx: offset, dy: offset),
+            rect.offsetBy(dx: -offset, dy: offset),
+            rect.offsetBy(dx: offset, dy: -offset),
+            rect.offsetBy(dx: -offset, dy: -offset)
+        ]
 
-        if shifted.maxX > 1 {
-            shifted.origin.x = max(0, 1 - shifted.width)
-        }
+        return candidates
+            .map(clampedRect)
+            .first { candidate in
+                candidate.origin != rect.origin
+            } ?? clampedRect(rect.offsetBy(dx: offset, dy: offset))
+    }
 
-        if shifted.maxY > 1 {
-            shifted.origin.y = max(0, 1 - shifted.height)
-        }
-
-        return shifted
+    private func clampedRect(_ rect: CGRect) -> CGRect {
+        var clamped = rect
+        clamped.origin.x = min(max(0, clamped.minX), max(0, 1 - clamped.width))
+        clamped.origin.y = min(max(0, clamped.minY), max(0, 1 - clamped.height))
+        return clamped
     }
 }

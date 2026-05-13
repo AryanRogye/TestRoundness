@@ -4,6 +4,7 @@ struct OverlayCanvas: View {
     let importedImage: ImportedImage?
     @Binding var overlays: [OverlayRectangle]
     @Binding var selectedOverlayID: UUID?
+    let swiftUIScale: Double
     let onImportImage: () -> Void
     let onPasteImage: () -> Void
     let onBeginOverlayEdit: () -> Void
@@ -71,7 +72,8 @@ struct OverlayCanvas: View {
     }
 
     private func imageEditor(for importedImage: ImportedImage, in availableSize: CGSize) -> some View {
-        let imageFrame = fittedImageFrame(imageSize: importedImage.image.size, availableSize: availableSize)
+        let pixelSize = importedImage.pixelSize
+        let imageFrame = fittedImageFrame(imageSize: pixelSize, availableSize: availableSize)
 
         return ZStack(alignment: .topLeading) {
             Image(nsImage: importedImage.image)
@@ -80,21 +82,29 @@ struct OverlayCanvas: View {
                 .aspectRatio(contentMode: .fit)
                 .frame(width: imageFrame.width, height: imageFrame.height)
 
-            overlayLayer(in: imageFrame.size, zoomScale: zoomScale)
+            overlayLayer(in: imageFrame.size, pixelSize: pixelSize, zoomScale: zoomScale)
         }
         .frame(width: imageFrame.width, height: imageFrame.height)
         .position(x: imageFrame.midX, y: imageFrame.midY)
         .shadow(color: .black.opacity(0.18), radius: 18, y: 8)
     }
 
-    private func overlayLayer(in imageSize: CGSize, zoomScale: CGFloat) -> some View {
+    private func overlayLayer(
+        in imageSize: CGSize,
+        pixelSize: CGSize,
+        zoomScale: CGFloat
+    ) -> some View {
         ZStack(alignment: .topLeading) {
             ForEach($overlays) { $overlay in
-                overlayView(
-                    overlay: $overlay,
-                    imageSize: imageSize,
-                    zoomScale: zoomScale
-                )
+                if overlay.isVisible {
+                    overlayView(
+                        overlay: $overlay,
+                        imageSize: imageSize,
+                        pixelSize: pixelSize,
+                        zoomScale: zoomScale
+                    )
+                    .zIndex(overlay.id == selectedOverlayID ? 1 : 0)
+                }
             }
         }
         .frame(width: imageSize.width, height: imageSize.height)
@@ -103,27 +113,32 @@ struct OverlayCanvas: View {
     private func overlayView(
         overlay: Binding<OverlayRectangle>,
         imageSize: CGSize,
+        pixelSize: CGSize,
         zoomScale: CGFloat
     ) -> some View {
         let settings = overlay.wrappedValue.settings
         let rect = denormalizedRect(settings.normalizedRect, in: imageSize)
         let isSelected = overlay.wrappedValue.id == selectedOverlayID
+        let tint = overlay.wrappedValue.tint.color
+        let swiftUIToCanvasScale = swiftUIToCanvasScale(displaySize: imageSize, pixelSize: pixelSize)
+        let cornerRadius = settings.cornerRadius * swiftUIToCanvasScale
+        let strokeWidth = settings.strokeWidth * swiftUIToCanvasScale
 
         return ZStack(alignment: .topLeading) {
             RoundedRectangle(
-                cornerRadius: settings.cornerRadius,
+                cornerRadius: cornerRadius,
                 style: settings.cornerStyle.swiftUIStyle
             )
-            .fill(Color.cyan.opacity(settings.fillOpacity))
+            .fill(tint.opacity(settings.fillOpacity))
             .overlay {
                 if settings.showsStroke {
                     RoundedRectangle(
-                        cornerRadius: settings.cornerRadius,
+                        cornerRadius: cornerRadius,
                         style: settings.cornerStyle.swiftUIStyle
                     )
                     .stroke(
-                        isSelected ? Color.white : Color.cyan,
-                        lineWidth: settings.strokeWidth / zoomScale
+                        isSelected ? Color.white : tint,
+                        lineWidth: strokeWidth
                     )
                     .shadow(color: .black.opacity(0.35), radius: 1 / zoomScale)
                 }
@@ -382,6 +397,14 @@ struct OverlayCanvas: View {
             width: rect.width * size.width,
             height: rect.height * size.height
         )
+    }
+
+    private func swiftUIToCanvasScale(displaySize: CGSize, pixelSize: CGSize) -> CGFloat {
+        let pixelsWide = max(pixelSize.width, 1)
+        let pixelsHigh = max(pixelSize.height, 1)
+        let xScale = displaySize.width / pixelsWide
+        let yScale = displaySize.height / pixelsHigh
+        return CGFloat(max(swiftUIScale, 1)) * min(xScale, yScale)
     }
 
     private func fittedImageFrame(imageSize: CGSize, availableSize: CGSize) -> CGRect {

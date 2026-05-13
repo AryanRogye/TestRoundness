@@ -5,6 +5,7 @@ struct RoundnessToolView: View {
     @Binding var overlays: [OverlayRectangle]
     @Binding var selectedOverlayID: UUID?
     let selectedOverlay: Binding<OverlayRectangle>?
+    @Binding var swiftUIScale: Double
     let canUndo: Bool
     let canRedo: Bool
     let onImportImage: () -> Void
@@ -12,6 +13,8 @@ struct RoundnessToolView: View {
     let onAddOverlay: () -> Void
     let onDeleteSelectedOverlay: () -> Void
     let onResetSelectedOverlay: () -> Void
+    let onToggleOverlayVisibility: (UUID) -> Void
+    let onShowAllOverlays: () -> Void
     let onBeginOverlayEdit: () -> Void
     let onEndOverlayEdit: () -> Void
     let onUndo: () -> Void
@@ -23,6 +26,7 @@ struct RoundnessToolView: View {
                 importedImage: importedImage,
                 overlays: $overlays,
                 selectedOverlayID: $selectedOverlayID,
+                swiftUIScale: swiftUIScale,
                 onImportImage: onImportImage,
                 onPasteImage: onPasteImage,
                 onBeginOverlayEdit: onBeginOverlayEdit,
@@ -33,9 +37,10 @@ struct RoundnessToolView: View {
 
             OverlayInspector(
                 importedImage: importedImage,
-                overlays: overlays,
+                overlays: $overlays,
                 selectedOverlayID: $selectedOverlayID,
                 selectedOverlay: selectedOverlay,
+                swiftUIScale: $swiftUIScale,
                 canUndo: canUndo,
                 canRedo: canRedo,
                 onImportImage: onImportImage,
@@ -43,6 +48,8 @@ struct RoundnessToolView: View {
                 onAddOverlay: onAddOverlay,
                 onDeleteSelectedOverlay: onDeleteSelectedOverlay,
                 onResetSelectedOverlay: onResetSelectedOverlay,
+                onToggleOverlayVisibility: onToggleOverlayVisibility,
+                onShowAllOverlays: onShowAllOverlays,
                 onUndo: onUndo,
                 onRedo: onRedo
             )
