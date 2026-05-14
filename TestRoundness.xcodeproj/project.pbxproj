@@ -6,7 +6,13 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		9B1F58FA2FB5BCEC00CC5D9A /* TestRoundnessIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 9B1F58F92FB5BCEC00CC5D9A /* TestRoundnessIcon.icon */; };
+		9B1F58FB2FB5BCEC00CC5D9A /* TestRoundnessIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 9B1F58F92FB5BCEC00CC5D9A /* TestRoundnessIcon.icon */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
+		9B1F58F92FB5BCEC00CC5D9A /* TestRoundnessIcon.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = TestRoundnessIcon.icon; sourceTree = "<group>"; };
 		9B56DB482FB532D200A740FD /* TestRoundness.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = TestRoundness.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		9B56DB562FB5400000A740FD /* TestRoundness iOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; name = "TestRoundness iOS.app"; path = TestRoundness.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -40,6 +46,7 @@
 		9B56DB3F2FB532D200A740FD = {
 			isa = PBXGroup;
 			children = (
+				9B1F58F92FB5BCEC00CC5D9A /* TestRoundnessIcon.icon */,
 				9B56DB4A2FB532D200A740FD /* TestRoundness */,
 				9B56DB492FB532D200A740FD /* Products */,
 			);
@@ -144,6 +151,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				9B1F58FB2FB5BCEC00CC5D9A /* TestRoundnessIcon.icon in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -151,6 +159,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				9B1F58FA2FB5BCEC00CC5D9A /* TestRoundnessIcon.icon in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -297,7 +306,7 @@
 		9B56DB542FB532D400A740FD /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = TestRoundnessIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
@@ -329,7 +338,7 @@
 		9B56DB552FB532D400A740FD /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = TestRoundnessIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;

@@ -1,0 +1,133 @@
+{
+  "color-space-for-untagged-svg-colors" : "display-p3",
+  "fill" : {
+    "linear-gradient" : [
+      "display-p3:0.18824,0.20392,0.23922,1.00000",
+      "srgb:0.09020,0.10196,0.12549,1.00000"
+    ]
+  },
+  "groups" : [
+    {
+      "layers" : [
+        {
+          "image-name" : "Crosshair.svg",
+          "name" : "Crosshair",
+          "position" : {
+            "scale" : 1.1,
+            "translation-in-points" : [
+              0,
+              0
+            ]
+          }
+        }
+      ],
+      "name" : "Handles",
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.5
+      },
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.5
+      }
+    },
+    {
+      "blend-mode" : "hard-light",
+      "blur-material" : null,
+      "layers" : [
+        {
+          "image-name" : "Handles.svg",
+          "name" : "Handles",
+          "position" : {
+            "scale" : 1,
+            "translation-in-points" : [
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "image-name" : "Measure.svg",
+          "name" : "Measure",
+          "position" : {
+            "scale" : 1,
+            "translation-in-points" : [
+              213,
+              -75
+            ]
+          }
+        }
+      ],
+      "lighting" : "combined",
+      "shadow" : {
+        "kind" : "layer-color",
+        "opacity" : 0.5
+      },
+      "specular" : true,
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0
+      }
+    },
+    {
+      "blur-material" : 0.11,
+      "layers" : [
+        {
+          "image-name" : "InnerFrame.svg",
+          "name" : "InnerFrame"
+        }
+      ],
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.5
+      },
+      "specular" : true,
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0
+      }
+    },
+    {
+      "layers" : [
+        {
+          "glass" : false,
+          "image-name" : "Corner.svg",
+          "name" : "Corner",
+          "position" : {
+            "scale" : 1,
+            "translation-in-points" : [
+              205,
+              -222
+            ]
+          }
+        },
+        {
+          "image-name" : "Checkerboard.svg",
+          "name" : "Checkerboard"
+        },
+        {
+          "glass" : false,
+          "hidden" : false,
+          "image-name" : "OuterFrame.svg",
+          "name" : "OuterFrame"
+        }
+      ],
+      "name" : "Frame",
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.5
+      },
+      "specular" : false,
+      "translucency" : {
+        "enabled" : false,
+        "value" : 0.5
+      }
+    }
+  ],
+  "supported-platforms" : {
+    "circles" : [
+      "watchOS"
+    ],
+    "squares" : "shared"
+  }
+}

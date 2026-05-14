@@ -77,6 +77,8 @@ struct OverlayInspector: View {
                     } label: {
                         Label("Add", systemImage: "plus")
                     }
+                    .keyboardShortcut("r", modifiers: [])
+                    .help("Add Rectangle (R)")
 
                     Button(role: .destructive) {
                         onDeleteSelectedOverlay()
@@ -84,6 +86,8 @@ struct OverlayInspector: View {
                         Label("Delete", systemImage: "trash")
                     }
                     .disabled(selectedOverlayID == nil)
+                    .keyboardShortcut("x", modifiers: [])
+                    .help("Delete Rectangle (X)")
                 }
 
                 Button {

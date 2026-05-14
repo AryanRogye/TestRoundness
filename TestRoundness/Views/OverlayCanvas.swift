@@ -179,7 +179,8 @@ private extension OverlayCanvas {
     ) -> some View {
         let settings = overlay.wrappedValue.settings
         let rect = denormalizedRect(settings.normalizedRect, in: imageSize)
-        let isSelected = overlay.wrappedValue.id == selectedOverlayID
+        let overlayID = overlay.wrappedValue.id
+        let isSelected = overlayID == selectedOverlayID
         let tint = overlay.wrappedValue.tint.color
         let swiftUIToCanvasScale = swiftUIToCanvasScale(displaySize: imageSize, pixelSize: pixelSize)
         let cornerRadius = settings.cornerRadius * swiftUIToCanvasScale
@@ -223,11 +224,11 @@ private extension OverlayCanvas {
             }
             .contentShape(Rectangle())
             .onTapGesture {
-                selectedOverlayID = overlay.wrappedValue.id
+                selectedOverlayID = overlayID
             }
             .gesture(dragGesture(overlay: overlay, in: imageSize))
             .onHover { hovering in
-                overlay.wrappedValue.settings.showsRectInfo = isShowingAllSizingInfo || (allowHoverSizingInfo && hovering)
+                updateSizingInfoVisibility(for: overlayID, hovering: hovering)
             }
 
             if isSelected && showsHandles {
@@ -240,6 +241,20 @@ private extension OverlayCanvas {
         }
         .frame(width: rect.width, height: rect.height)
         .position(x: rect.midX, y: rect.midY)
+    }
+}
+
+// MARK: - Overlay Feedback
+
+private extension OverlayCanvas {
+    /// Updates hover sizing info by id so stale hover callbacks after deletion cannot touch a removed binding.
+    private func updateSizingInfoVisibility(for overlayID: UUID, hovering: Bool) {
+        guard let overlayIndex = overlays.firstIndex(where: { $0.id == overlayID }) else { return }
+
+        let shouldShowSizingInfo = isShowingAllSizingInfo || (allowHoverSizingInfo && hovering)
+        guard overlays[overlayIndex].settings.showsRectInfo != shouldShowSizingInfo else { return }
+
+        overlays[overlayIndex].settings.showsRectInfo = shouldShowSizingInfo
     }
 }
 
@@ -484,12 +499,14 @@ private extension OverlayCanvas {
 // MARK: - Overlay Geometry
 
 private extension OverlayCanvas {
+    /// Converts a drag translation into normalized image units without amplifying zoomed-out movement.
+    /// For example, dragging 10 canvas points at 72% zoom should not move like a 24-point drag.
     private func normalizedDelta(_ translation: CGSize, in imageSize: CGSize) -> CGSize {
-        let speed: CGFloat = 1.75
+        let effectiveZoom = max(zoomScale, 1)
 
         return CGSize(
-            width: (translation.width * speed) / (imageSize.width * zoomScale),
-            height: (translation.height * speed) / (imageSize.height * zoomScale)
+            width: translation.width / (imageSize.width * effectiveZoom),
+            height: translation.height / (imageSize.height * effectiveZoom)
         )
     }
 
