@@ -1,21 +1,40 @@
-import AppKit
 import SwiftUI
+
+#if os(macOS)
+import AppKit
+typealias PlatformImage = NSImage
+#elseif canImport(UIKit)
+import UIKit
+typealias PlatformImage = UIImage
+#endif
 
 struct ImportedImage: Identifiable {
     let id = UUID()
     let sourceName: String
-    let image: NSImage
+    let image: PlatformImage
 
     var displayName: String {
         sourceName
     }
 
     var pixelSize: CGSize {
+        #if os(macOS)
         guard let representation = image.representations.first else {
             return image.size
         }
 
         return CGSize(width: representation.pixelsWide, height: representation.pixelsHigh)
+        #else
+        return CGSize(width: image.size.width * image.scale, height: image.size.height * image.scale)
+        #endif
+    }
+
+    var swiftUIImage: Image {
+        #if os(macOS)
+        Image(nsImage: image)
+        #else
+        Image(uiImage: image)
+        #endif
     }
 
     var pixelSizeText: String {

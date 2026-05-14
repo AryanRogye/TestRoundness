@@ -1,6 +1,8 @@
 import SwiftUI
 
 struct OverlayInspector: View {
+    let projects: [ProjectSummary]
+    @Binding var selectedProjectID: UUID?
     let importedImage: ImportedImage?
     @Binding var overlays: [OverlayRectangle]
     @Binding var selectedOverlayID: UUID?
@@ -8,6 +10,8 @@ struct OverlayInspector: View {
     @Binding var swiftUIScale: Double
     let canUndo: Bool
     let canRedo: Bool
+    let onSelectProject: (UUID) -> Void
+    let onDeleteSelectedProject: () -> Void
     let onImportImage: () -> Void
     let onPasteImage: () -> Void
     let onAddOverlay: () -> Void
@@ -20,6 +24,44 @@ struct OverlayInspector: View {
 
     var body: some View {
         Form {
+            Section("Projects") {
+                if projects.isEmpty {
+                    Text("No projects")
+                        .foregroundStyle(.secondary)
+                } else {
+                    Picker("Open", selection: projectSelection) {
+                        ForEach(projects) { project in
+                            Text(project.name).tag(Optional(project.id))
+                        }
+                    }
+
+                    if let project = selectedProject {
+                        LabeledContent("Updated", value: formattedDate(project.modifiedAt))
+                    }
+                }
+
+                HStack {
+                    Button {
+                        onImportImage()
+                    } label: {
+                        Label("New", systemImage: "photo.badge.plus")
+                    }
+
+                    Button {
+                        onPasteImage()
+                    } label: {
+                        Label("Paste", systemImage: "doc.on.clipboard")
+                    }
+
+                    Button(role: .destructive) {
+                        onDeleteSelectedProject()
+                    } label: {
+                        Label("Delete", systemImage: "trash")
+                    }
+                    .disabled(selectedProjectID == nil)
+                }
+            }
+
             Section("Image") {
                 if let importedImage {
                     LabeledContent("File", value: importedImage.displayName)
@@ -37,19 +79,9 @@ struct OverlayInspector: View {
                 }
                 .pickerStyle(.segmented)
 
-                HStack {
-                    Button {
-                        onImportImage()
-                    } label: {
-                        Label("Import", systemImage: "photo.badge.plus")
-                    }
-
-                    Button {
-                        onPasteImage()
-                    } label: {
-                        Label("Paste", systemImage: "doc.on.clipboard")
-                    }
-                }
+                Text("Import or paste creates a new project.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Section("Rectangles") {
@@ -82,7 +114,7 @@ struct OverlayInspector: View {
                 } label: {
                     Label("Show All", systemImage: "eye")
                 }
-                .disabled(!overlays.contains { !$0.isVisible })
+                .disabled(overlays.isEmpty)
 
                 HStack {
                     Button {
@@ -112,6 +144,20 @@ struct OverlayInspector: View {
         }
         .formStyle(.grouped)
         .padding(.vertical, 8)
+    }
+
+    private var selectedProject: ProjectSummary? {
+        projects.first { $0.id == selectedProjectID }
+    }
+
+    private var projectSelection: Binding<UUID?> {
+        Binding(
+            get: { selectedProjectID },
+            set: { newProjectID in
+                guard let newProjectID else { return }
+                onSelectProject(newProjectID)
+            }
+        )
     }
 
     private func overlayRow(_ overlay: OverlayRectangle) -> some View {
@@ -169,12 +215,7 @@ struct OverlayInspector: View {
                 }
                 .pickerStyle(.segmented)
 
-                valueSlider(
-                    title: "Radius",
-                    value: overlay.settings.cornerRadius,
-                    range: 0...240,
-                    suffix: "pt"
-                )
+                radiusSlider(value: overlay.settings.cornerRadius)
 
                 valueSlider(
                     title: "Opacity",
@@ -185,18 +226,6 @@ struct OverlayInspector: View {
                     range: 0.05...0.9,
                     suffix: ""
                 )
-            }
-
-            Section("Stroke") {
-                Toggle("Show stroke", isOn: overlay.settings.showsStroke)
-
-                valueSlider(
-                    title: "Width",
-                    value: overlay.settings.strokeWidth,
-                    range: 1...12,
-                    suffix: "pt"
-                )
-                .disabled(!overlay.wrappedValue.settings.showsStroke)
             }
 
             Section("Overlay") {
@@ -251,12 +280,41 @@ struct OverlayInspector: View {
         }
     }
 
+    private func radiusSlider(value: Binding<CGFloat>) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text("Radius")
+                Spacer()
+                Text(radiusText(value.wrappedValue))
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+
+            Slider(value: value, in: 0...240)
+        }
+    }
+
     private func valueText(_ value: CGFloat, suffix: String) -> String {
         if suffix.isEmpty {
             return String(format: "%.0f%%", value * 100)
         }
 
         return String(format: "%.0f %@", value, suffix)
+    }
+
+    private func formattedDate(_ date: Date) -> String {
+        date.formatted(date: .abbreviated, time: .shortened)
+    }
+
+    private func radiusText(_ value: CGFloat) -> String {
+        let scale = CGFloat(max(swiftUIScale, 1))
+        let pixelRadius = value * scale
+
+        if value.rounded() == value {
+            return String(format: "%.0f pt / %.0f px @%.0fx", value, pixelRadius, scale)
+        }
+
+        return String(format: "%.1f pt / %.0f px @%.0fx", value, pixelRadius, scale)
     }
 
     private func pointValueField(title: String, value: Binding<Double>) -> some View {
@@ -359,7 +417,9 @@ struct OverlayInspector: View {
     ) -> CGFloat {
         let safePixelLength = max(pixelLength, 1)
         let normalizedValue = CGFloat(pointValue * max(swiftUIScale, 1)) / safePixelLength
-        return min(max(0.001, normalizedValue), max(0.001, 1 - origin))
+        let minimumLength = 1 / safePixelLength
+        let maximumLength = max(minimumLength, 1 - origin)
+        return min(max(minimumLength, normalizedValue), maximumLength)
     }
 
     private func percentText(_ value: CGFloat) -> String {

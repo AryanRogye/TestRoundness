@@ -10,30 +10,22 @@ struct OverlayCanvas: View {
     let onBeginOverlayEdit: () -> Void
     let onEndOverlayEdit: () -> Void
 
-    @State private var canvasTool: CanvasTool = .adjustOverlay
     @State private var showsHandles = true
     @State private var zoomScale: CGFloat = 1
     @State private var magnifyStartScale: CGFloat?
     @State private var panOffset: CGSize = .zero
     @State private var panStartOffset: CGSize?
+    @State private var isTouchPanBlocked = false
     @State private var dragStartRect: CGRect?
     @State private var resizeStartRect: CGRect?
 
     var body: some View {
         GeometryReader { proxy in
             ZStack {
-                CheckerboardBackground()
+                canvasSurface(in: proxy.size)
 
-                if let importedImage {
-                    imageEditor(for: importedImage, in: proxy.size)
-                        .scaleEffect(zoomScale)
-                        .offset(panOffset)
-                        .simultaneousGesture(panGesture())
-                        .simultaneousGesture(magnificationGesture())
-
+                if importedImage != nil {
                     canvasControls
-                } else {
-                    emptyState
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -44,6 +36,35 @@ struct OverlayCanvas: View {
         }
     }
 
+    private func canvasSurface(in availableSize: CGSize) -> some View {
+        let surface = ZStack {
+            CheckerboardBackground()
+
+            if let importedImage {
+                imageEditor(for: importedImage, in: availableSize)
+                    .scaleEffect(zoomScale)
+                    .offset(panOffset)
+            } else {
+                emptyState
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .contentShape(Rectangle())
+        .trackpadPan { delta in
+            panOffset.width += delta.width
+            panOffset.height += delta.height
+        }
+
+        #if os(iOS)
+        return surface
+            .simultaneousGesture(touchPanGesture(in: availableSize))
+            .simultaneousGesture(magnificationGesture())
+        #else
+        return surface
+            .simultaneousGesture(magnificationGesture())
+        #endif
+    }
+
     private var emptyState: some View {
         VStack(spacing: 14) {
             Image(systemName: "photo.on.rectangle.angled")
@@ -52,23 +73,39 @@ struct OverlayCanvas: View {
 
             Text("Import or paste an image to start matching its corner radius.")
                 .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
 
-            HStack(spacing: 10) {
-                Button {
-                    onImportImage()
-                } label: {
-                    Label("Import Image", systemImage: "photo.badge.plus")
+            ViewThatFits {
+                HStack(spacing: 10) {
+                    importButton
+                    pasteButton
                 }
-                .buttonStyle(.borderedProminent)
 
-                Button {
-                    onPasteImage()
-                } label: {
-                    Label("Paste Image", systemImage: "doc.on.clipboard")
+                VStack(spacing: 10) {
+                    importButton
+                    pasteButton
                 }
-                .keyboardShortcut("v", modifiers: .command)
             }
         }
+        .padding(24)
+    }
+
+    private var importButton: some View {
+        Button {
+            onImportImage()
+        } label: {
+            Label("Import Image", systemImage: "photo.badge.plus")
+        }
+        .buttonStyle(.borderedProminent)
+    }
+
+    private var pasteButton: some View {
+        Button {
+            onPasteImage()
+        } label: {
+            Label("Paste Image", systemImage: "doc.on.clipboard")
+        }
+        .keyboardShortcut("v", modifiers: .command)
     }
 
     private func imageEditor(for importedImage: ImportedImage, in availableSize: CGSize) -> some View {
@@ -76,7 +113,7 @@ struct OverlayCanvas: View {
         let imageFrame = fittedImageFrame(imageSize: pixelSize, availableSize: availableSize)
 
         return ZStack(alignment: .topLeading) {
-            Image(nsImage: importedImage.image)
+            importedImage.swiftUIImage
                 .resizable()
                 .interpolation(zoomScale >= 2 ? .none : .high)
                 .aspectRatio(contentMode: .fit)
@@ -122,7 +159,8 @@ struct OverlayCanvas: View {
         let tint = overlay.wrappedValue.tint.color
         let swiftUIToCanvasScale = swiftUIToCanvasScale(displaySize: imageSize, pixelSize: pixelSize)
         let cornerRadius = settings.cornerRadius * swiftUIToCanvasScale
-        let strokeWidth = settings.strokeWidth * swiftUIToCanvasScale
+
+        let localRect = CGRect(origin: .zero, size: rect.size)
 
         return ZStack(alignment: .topLeading) {
             RoundedRectangle(
@@ -130,28 +168,8 @@ struct OverlayCanvas: View {
                 style: settings.cornerStyle.swiftUIStyle
             )
             .fill(tint.opacity(settings.fillOpacity))
-            .overlay {
-                if settings.showsStroke {
-                    RoundedRectangle(
-                        cornerRadius: cornerRadius,
-                        style: settings.cornerStyle.swiftUIStyle
-                    )
-                    .stroke(
-                        isSelected ? Color.white : tint,
-                        lineWidth: strokeWidth
-                    )
-                    .shadow(color: .black.opacity(0.35), radius: 1 / zoomScale)
-                }
-            }
-            .overlay {
-                if isSelected {
-                    Rectangle()
-                        .stroke(Color.accentColor, lineWidth: 1 / zoomScale)
-                }
-            }
             .frame(width: rect.width, height: rect.height)
             .contentShape(Rectangle())
-            .offset(x: rect.minX, y: rect.minY)
             .onTapGesture {
                 selectedOverlayID = overlay.wrappedValue.id
             }
@@ -160,76 +178,66 @@ struct OverlayCanvas: View {
             if isSelected && showsHandles {
                 ForEach(ResizeHandle.allCases) { handle in
                     ResizeHandleView(handle: handle, zoomScale: zoomScale)
-                        .position(handle.position(in: rect))
-                        .opacity(canvasTool == .adjustOverlay ? 1 : 0.35)
+                        .position(handle.position(in: localRect))
                         .gesture(resizeGesture(overlay: overlay, handle: handle, in: imageSize))
                 }
             }
         }
-        .frame(width: imageSize.width, height: imageSize.height)
+        .frame(width: rect.width, height: rect.height)
+        .position(x: rect.midX, y: rect.midY)
     }
 
     private var canvasControls: some View {
         VStack {
-            HStack(spacing: 8) {
-                Button {
-                    setZoom(zoomScale / 1.25)
-                } label: {
-                    Image(systemName: "minus.magnifyingglass")
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    Button {
+                        setZoom(zoomScale / 1.25)
+                    } label: {
+                        Image(systemName: "minus.magnifyingglass")
+                    }
+                    .help("Zoom out")
+
+                    Text("\(Int((zoomScale * 100).rounded()))%")
+                        .font(.callout)
+                        .monospacedDigit()
+                        .frame(width: 54, alignment: .trailing)
+
+                    Slider(
+                        value: Binding(
+                            get: { zoomScale },
+                            set: { setZoom($0) }
+                        ),
+                        in: 0.25...8
+                    )
+                    .frame(width: 150)
+
+                    Button {
+                        setZoom(zoomScale * 1.25)
+                    } label: {
+                        Image(systemName: "plus.magnifyingglass")
+                    }
+                    .help("Zoom in")
+
+                    Button {
+                        resetCanvasView()
+                    } label: {
+                        Image(systemName: "arrow.counterclockwise")
+                    }
+                    .help("Reset view")
+
+                    Button {
+                        showsHandles.toggle()
+                    } label: {
+                        Image(systemName: showsHandles ? "eye" : "eye.slash")
+                    }
+                    .help(showsHandles ? "Hide resize handles" : "Show resize handles")
+
                 }
-                .help("Zoom out")
-
-                Text("\(Int((zoomScale * 100).rounded()))%")
-                    .font(.callout)
-                    .monospacedDigit()
-                    .frame(width: 54, alignment: .trailing)
-
-                Slider(
-                    value: Binding(
-                        get: { zoomScale },
-                        set: { setZoom($0) }
-                    ),
-                    in: 0.25...8
-                )
-                .frame(width: 150)
-
-                Button {
-                    setZoom(zoomScale * 1.25)
-                } label: {
-                    Image(systemName: "plus.magnifyingglass")
-                }
-                .help("Zoom in")
-
-                Button {
-                    resetCanvasView()
-                } label: {
-                    Image(systemName: "arrow.counterclockwise")
-                }
-                .help("Reset view")
-
-                Button {
-                    showsHandles.toggle()
-                } label: {
-                    Image(systemName: showsHandles ? "eye" : "eye.slash")
-                }
-                .help(showsHandles ? "Hide resize handles" : "Show resize handles")
-
-                Divider()
-                    .frame(height: 20)
-
-                Picker("Tool", selection: $canvasTool) {
-                    Label("Overlay", systemImage: "rectangle.dashed")
-                        .tag(CanvasTool.adjustOverlay)
-                    Label("Pan", systemImage: "hand.draw")
-                        .tag(CanvasTool.pan)
-                }
-                .labelsHidden()
-                .pickerStyle(.segmented)
-                .frame(width: 128)
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .padding(8)
             }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
-            .padding(8)
             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
             .shadow(color: .black.opacity(0.12), radius: 8, y: 3)
 
@@ -237,26 +245,6 @@ struct OverlayCanvas: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .padding(16)
-    }
-
-    private func panGesture() -> some Gesture {
-        DragGesture()
-            .onChanged { value in
-                guard canvasTool == .pan else { return }
-
-                if panStartOffset == nil {
-                    panStartOffset = panOffset
-                }
-
-                guard let panStartOffset else { return }
-                panOffset = CGSize(
-                    width: panStartOffset.width + value.translation.width,
-                    height: panStartOffset.height + value.translation.height
-                )
-            }
-            .onEnded { _ in
-                panStartOffset = nil
-            }
     }
 
     private func magnificationGesture() -> some Gesture {
@@ -286,14 +274,91 @@ struct OverlayCanvas: View {
         zoomScale = 1
         panOffset = .zero
         panStartOffset = nil
+        isTouchPanBlocked = false
         magnifyStartScale = nil
     }
+
+    #if os(iOS)
+    private func touchPanGesture(in availableSize: CGSize) -> some Gesture {
+        DragGesture(minimumDistance: 8)
+            .onChanged { value in
+                if panStartOffset == nil && !isTouchPanBlocked {
+                    isTouchPanBlocked = isPointOnVisibleOverlay(
+                        value.startLocation,
+                        availableSize: availableSize
+                    )
+
+                    if !isTouchPanBlocked {
+                        panStartOffset = panOffset
+                    }
+                }
+
+                guard !isTouchPanBlocked, let panStartOffset else { return }
+                panOffset = CGSize(
+                    width: panStartOffset.width + value.translation.width,
+                    height: panStartOffset.height + value.translation.height
+                )
+            }
+            .onEnded { _ in
+                panStartOffset = nil
+                isTouchPanBlocked = false
+            }
+    }
+
+    private func isPointOnVisibleOverlay(_ point: CGPoint, availableSize: CGSize) -> Bool {
+        guard let importedImage else { return false }
+
+        let imageFrame = transformedImageFrame(
+            for: importedImage,
+            availableSize: availableSize
+        )
+
+        return overlays.contains { overlay in
+            guard overlay.isVisible else { return false }
+
+            let rect = overlay.settings.normalizedRect
+            let overlayFrame = CGRect(
+                x: imageFrame.minX + rect.minX * imageFrame.width,
+                y: imageFrame.minY + rect.minY * imageFrame.height,
+                width: rect.width * imageFrame.width,
+                height: rect.height * imageFrame.height
+            )
+            .insetBy(dx: -28, dy: -28)
+
+            return overlayFrame.contains(point)
+        }
+    }
+
+    private func transformedImageFrame(
+        for importedImage: ImportedImage,
+        availableSize: CGSize
+    ) -> CGRect {
+        let imageFrame = fittedImageFrame(
+            imageSize: importedImage.pixelSize,
+            availableSize: availableSize
+        )
+        let scaledSize = CGSize(
+            width: imageFrame.width * zoomScale,
+            height: imageFrame.height * zoomScale
+        )
+        let center = CGPoint(
+            x: imageFrame.midX + panOffset.width,
+            y: imageFrame.midY + panOffset.height
+        )
+
+        return CGRect(
+            x: center.x - scaledSize.width / 2,
+            y: center.y - scaledSize.height / 2,
+            width: scaledSize.width,
+            height: scaledSize.height
+        )
+    }
+    #endif
 
     private func dragGesture(overlay: Binding<OverlayRectangle>, in imageSize: CGSize) -> some Gesture {
         DragGesture()
             .onChanged { value in
-                guard canvasTool == .adjustOverlay else { return }
-
+                isTouchPanBlocked = true
                 selectedOverlayID = overlay.wrappedValue.id
 
                 if dragStartRect == nil {
@@ -307,6 +372,7 @@ struct OverlayCanvas: View {
             }
             .onEnded { _ in
                 dragStartRect = nil
+                isTouchPanBlocked = false
                 onEndOverlayEdit()
             }
     }
@@ -318,8 +384,7 @@ struct OverlayCanvas: View {
     ) -> some Gesture {
         DragGesture()
             .onChanged { value in
-                guard canvasTool == .adjustOverlay else { return }
-
+                isTouchPanBlocked = true
                 selectedOverlayID = overlay.wrappedValue.id
 
                 if resizeStartRect == nil {
@@ -339,6 +404,7 @@ struct OverlayCanvas: View {
             }
             .onEnded { _ in
                 resizeStartRect = nil
+                isTouchPanBlocked = false
                 onEndOverlayEdit()
             }
     }
@@ -363,8 +429,8 @@ struct OverlayCanvas: View {
         by delta: CGSize,
         in imageSize: CGSize
     ) -> CGRect {
-        let minWidth = max(28 / imageSize.width, 0.02)
-        let minHeight = max(28 / imageSize.height, 0.02)
+        let minWidth = max(2 / imageSize.width, 0.0001)
+        let minHeight = max(2 / imageSize.height, 0.0001)
 
         var minX = rect.minX
         var maxX = rect.maxX
@@ -432,12 +498,97 @@ private struct ResizeHandleView: View {
             .fill(.background)
             .strokeBorder(Color.accentColor, lineWidth: 2 / zoomScale)
             .frame(
-                width: (handle.isCorner ? 12 : 10) / zoomScale,
-                height: (handle.isCorner ? 12 : 10) / zoomScale
+                width: handleSize / zoomScale,
+                height: handleSize / zoomScale
             )
             .shadow(color: .black.opacity(0.2), radius: 2 / zoomScale, y: 1 / zoomScale)
     }
+
+    private var handleSize: CGFloat {
+        #if os(iOS)
+        handle.isCorner ? 24 : 22
+        #else
+        handle.isCorner ? 12 : 10
+        #endif
+    }
 }
+
+#if os(macOS)
+private extension View {
+    func trackpadPan(_ onPan: @escaping (CGSize) -> Void) -> some View {
+        background(TrackpadPanMonitor(onPan: onPan))
+    }
+}
+
+private struct TrackpadPanMonitor: NSViewRepresentable {
+    let onPan: (CGSize) -> Void
+
+    func makeNSView(context: Context) -> MonitoringView {
+        let view = MonitoringView()
+        view.onPan = onPan
+        return view
+    }
+
+    func updateNSView(_ nsView: MonitoringView, context: Context) {
+        nsView.onPan = onPan
+    }
+
+    final class MonitoringView: NSView {
+        var onPan: ((CGSize) -> Void)?
+        private var monitor: Any?
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+
+            if window == nil {
+                removeMonitor()
+            } else if monitor == nil {
+                installMonitor()
+            }
+        }
+
+        deinit {
+            removeMonitor()
+        }
+
+        private func installMonitor() {
+            monitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
+                guard let self, window != nil else { return event }
+
+                let point = convert(event.locationInWindow, from: nil)
+                guard bounds.contains(point), !isPointInControlsArea(point) else { return event }
+
+                let multiplier: CGFloat = event.hasPreciseScrollingDeltas ? 1 : 8
+                onPan?(
+                    CGSize(
+                        width: event.scrollingDeltaX * multiplier,
+                        height: event.scrollingDeltaY * multiplier
+                    )
+                )
+
+                return event
+            }
+        }
+
+        private func removeMonitor() {
+            if let monitor {
+                NSEvent.removeMonitor(monitor)
+                self.monitor = nil
+            }
+        }
+
+        private func isPointInControlsArea(_ point: CGPoint) -> Bool {
+            point.y > bounds.height - 72
+        }
+    }
+}
+#else
+private extension View {
+    func trackpadPan(_ onPan: @escaping (CGSize) -> Void) -> some View {
+        self
+    }
+}
+#endif
 
 private enum ResizeHandle: CaseIterable, Identifiable {
     case topLeft
@@ -496,11 +647,6 @@ private enum ResizeHandle: CaseIterable, Identifiable {
             return CGPoint(x: rect.minX, y: rect.midY)
         }
     }
-}
-
-private enum CanvasTool: Hashable {
-    case adjustOverlay
-    case pan
 }
 
 private struct CheckerboardBackground: View {

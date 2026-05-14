@@ -1,6 +1,12 @@
-import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
+
+#if os(macOS)
+import AppKit
+#elseif os(iOS)
+import PhotosUI
+import UIKit
+#endif
 
 struct ContentView: View {
     private static let initialDocumentState = RoundnessDocumentState.fresh
@@ -13,81 +19,110 @@ struct ContentView: View {
     @State private var pendingEditSnapshot: RoundnessDocumentState?
     @State private var isImporterPresented = false
     @State private var importError: String?
+    @State private var projects: [ProjectSummary] = []
+    @State private var selectedProjectID: UUID?
+    @State private var showsProjectHome = true
+    @State private var projectPendingDeletion: ProjectSummary?
     @AppStorage("swiftUIScale") private var swiftUIScale = 3.0
+    @Environment(\.displayScale) private var displayScale
+    #if os(iOS)
+    @State private var isPhotoPickerPresented = false
+    @State private var selectedPhotoItem: PhotosPickerItem?
+    #endif
 
     private let imageStore = LastImageStore()
 
     var body: some View {
-        RoundnessToolView(
-            importedImage: importedImage,
-            overlays: $overlays,
-            selectedOverlayID: $selectedOverlayID,
-            selectedOverlay: selectedOverlayBinding,
-            swiftUIScale: $swiftUIScale,
-            canUndo: !undoStack.isEmpty,
-            canRedo: !redoStack.isEmpty,
-            onImportImage: { isImporterPresented = true },
-            onPasteImage: pasteImageFromClipboard,
-            onAddOverlay: addOverlay,
-            onDeleteSelectedOverlay: deleteSelectedOverlay,
-            onResetSelectedOverlay: resetSelectedOverlay,
-            onToggleOverlayVisibility: toggleOverlayVisibility,
-            onShowAllOverlays: showAllOverlays,
-            onBeginOverlayEdit: beginOverlayEdit,
-            onEndOverlayEdit: endOverlayEdit,
-            onUndo: undo,
-            onRedo: redo
-        )
-        .frame(minWidth: 940, minHeight: 620)
+        #if os(iOS)
+        content
+            .photosPicker(
+                isPresented: $isPhotoPickerPresented,
+                selection: $selectedPhotoItem,
+                matching: .images
+            )
+            .onChange(of: selectedPhotoItem) {
+                importSelectedPhoto()
+            }
+        #else
+        content
+        #endif
+    }
+
+    private var content: some View {
+        ZStack {
+            if showsProjectHome {
+                ProjectHomeView(
+                    projects: projects,
+                    selectedProjectID: selectedProjectID,
+                    onOpenProject: openProject,
+                    onNewProject: presentImageImporter,
+                    onPasteProject: pasteImageFromClipboard,
+                    onDeleteProject: requestProjectDeletion
+                )
+            } else {
+                editor
+            }
+        }
+        .modifier(PlatformWindowFrame())
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
                 Button {
-                    undo()
+                    showsProjectHome = true
                 } label: {
-                    Label("Undo", systemImage: "arrow.uturn.backward")
+                    Label("Home", systemImage: "house")
                 }
-                .disabled(undoStack.isEmpty)
-                .keyboardShortcut("z", modifiers: .command)
-
-                Button {
-                    redo()
-                } label: {
-                    Label("Redo", systemImage: "arrow.uturn.forward")
-                }
-                .disabled(redoStack.isEmpty)
-                .keyboardShortcut("z", modifiers: [.command, .shift])
             }
 
-            ToolbarItemGroup(placement: .primaryAction) {
-                Button {
-                    addOverlay()
-                } label: {
-                    Label("Add Rectangle", systemImage: "plus.rectangle.on.rectangle")
+            if !showsProjectHome {
+                ToolbarItemGroup(placement: .primaryAction) {
+                    Button {
+                        undo()
+                    } label: {
+                        Label("Undo", systemImage: "arrow.uturn.backward")
+                    }
+                    .disabled(undoStack.isEmpty)
+                    .keyboardShortcut("z", modifiers: .command)
+
+                    Button {
+                        redo()
+                    } label: {
+                        Label("Redo", systemImage: "arrow.uturn.forward")
+                    }
+                    .disabled(redoStack.isEmpty)
+                    .keyboardShortcut("z", modifiers: [.command, .shift])
                 }
 
-                Button {
-                    deleteSelectedOverlay()
-                } label: {
-                    Label("Delete Rectangle", systemImage: "trash")
-                }
-                .disabled(selectedOverlayID == nil)
-                .keyboardShortcut(.delete, modifiers: [])
-            }
+                ToolbarItemGroup(placement: .primaryAction) {
+                    Button {
+                        addOverlay()
+                    } label: {
+                        Label("Add Rectangle", systemImage: "plus.rectangle.on.rectangle")
+                    }
 
-            ToolbarItemGroup(placement: .primaryAction) {
-                Button {
-                    isImporterPresented = true
-                } label: {
-                    Label("Import Image", systemImage: "photo.badge.plus")
+                    Button {
+                        deleteSelectedOverlay()
+                    } label: {
+                        Label("Delete Rectangle", systemImage: "trash")
+                    }
+                    .disabled(selectedOverlayID == nil)
+                    .keyboardShortcut(.delete, modifiers: [])
                 }
-                .keyboardShortcut("o", modifiers: .command)
 
-                Button {
-                    pasteImageFromClipboard()
-                } label: {
-                    Label("Paste Image", systemImage: "doc.on.clipboard")
+                ToolbarItemGroup(placement: .primaryAction) {
+                    Button {
+                        presentImageImporter()
+                    } label: {
+                        Label("Import Image", systemImage: "photo.badge.plus")
+                    }
+                    .keyboardShortcut("o", modifiers: .command)
+
+                    Button {
+                        pasteImageFromClipboard()
+                    } label: {
+                        Label("Paste Image", systemImage: "doc.on.clipboard")
+                    }
+                    .keyboardShortcut("v", modifiers: .command)
                 }
-                .keyboardShortcut("v", modifiers: .command)
             }
         }
         .fileImporter(
@@ -103,13 +138,70 @@ struct ContentView: View {
         } message: {
             Text(importError ?? "")
         }
-        .onAppear(perform: restoreLastImage)
+        .alert("Delete Project?", isPresented: projectDeletionBinding) {
+            Button("Cancel", role: .cancel) {
+                projectPendingDeletion = nil
+            }
+
+            Button("Delete", role: .destructive) {
+                guard let projectPendingDeletion else { return }
+                deleteProject(projectPendingDeletion)
+            }
+        } message: {
+            Text("This removes the project, its image, and all rectangles. This cannot be undone.")
+        }
+        .onChange(of: swiftUIScale) {
+            saveCurrentDocumentState()
+        }
+        .onAppear(perform: restoreProjects)
+    }
+
+    private var editor: some View {
+        RoundnessToolView(
+            projects: projects,
+            selectedProjectID: $selectedProjectID,
+            importedImage: importedImage,
+            overlays: $overlays,
+            selectedOverlayID: $selectedOverlayID,
+            selectedOverlay: selectedOverlayBinding,
+            swiftUIScale: $swiftUIScale,
+            canUndo: !undoStack.isEmpty,
+            canRedo: !redoStack.isEmpty,
+            onSelectProject: selectProject,
+            onDeleteSelectedProject: requestSelectedProjectDeletion,
+            onImportImage: presentImageImporter,
+            onPasteImage: pasteImageFromClipboard,
+            onAddOverlay: addOverlay,
+            onDeleteSelectedOverlay: deleteSelectedOverlay,
+            onResetSelectedOverlay: resetSelectedOverlay,
+            onToggleOverlayVisibility: toggleOverlayVisibility,
+            onShowAllOverlays: showAllOverlays,
+            onBeginOverlayEdit: beginOverlayEdit,
+            onEndOverlayEdit: endOverlayEdit,
+            onUndo: undo,
+            onRedo: redo
+        )
+    }
+
+    private func presentImageImporter() {
+        #if os(iOS)
+        isPhotoPickerPresented = true
+        #else
+        isImporterPresented = true
+        #endif
     }
 
     private var importErrorBinding: Binding<Bool> {
         Binding(
             get: { importError != nil },
             set: { if !$0 { importError = nil } }
+        )
+    }
+
+    private var projectDeletionBinding: Binding<Bool> {
+        Binding(
+            get: { projectPendingDeletion != nil },
+            set: { if !$0 { projectPendingDeletion = nil } }
         )
     }
 
@@ -141,62 +233,186 @@ struct ContentView: View {
             }
 
             let data = try Data(contentsOf: url)
-            guard let nsImage = NSImage(data: data) else {
+            guard let image = PlatformImage(data: data) else {
                 importError = "The selected file could not be decoded as an image."
                 return
             }
 
-            setImportedImage(nsImage, sourceName: url.lastPathComponent)
+            importNewImage(image, sourceName: url.lastPathComponent)
         } catch {
             importError = error.localizedDescription
         }
     }
 
     private func pasteImageFromClipboard() {
+        #if os(macOS)
         let pasteboard = NSPasteboard.general
 
         if let image = pasteboard
             .readObjects(forClasses: [NSImage.self], options: nil)?
             .compactMap({ $0 as? NSImage })
             .first {
-            setImportedImage(image, sourceName: "Pasted Image")
+            importNewImage(image, sourceName: "Pasted Image")
             return
         }
 
         for type in [NSPasteboard.PasteboardType.tiff, .png] {
             if let data = pasteboard.data(forType: type), let image = NSImage(data: data) {
-                setImportedImage(image, sourceName: "Pasted Image")
+                importNewImage(image, sourceName: "Pasted Image")
                 return
             }
         }
 
         importError = "The clipboard does not currently contain an image. Copy a photo or screenshot, then paste again."
+        #else
+        guard let image = UIPasteboard.general.image else {
+            importError = "The clipboard does not currently contain an image. Copy a photo or screenshot, then paste again."
+            return
+        }
+
+        importNewImage(image, sourceName: "Pasted Image")
+        #endif
     }
 
-    private func setImportedImage(_ image: NSImage, sourceName: String) {
+    #if os(iOS)
+    private func importSelectedPhoto() {
+        guard let selectedPhotoItem else { return }
+        self.selectedPhotoItem = nil
+
+        Task {
+            do {
+                guard
+                    let data = try await selectedPhotoItem.loadTransferable(type: Data.self),
+                    let image = PlatformImage(data: data)
+                else {
+                    importError = "The selected photo could not be decoded as an image."
+                    return
+                }
+
+                importNewImage(image, sourceName: "Photo Library Image")
+            } catch {
+                importError = error.localizedDescription
+            }
+        }
+    }
+    #endif
+
+    private func importNewImage(_ image: PlatformImage, sourceName: String) {
+        createProject(image, sourceName: sourceName)
+    }
+
+    private func createProject(_ image: PlatformImage, sourceName: String) {
         let freshState = RoundnessDocumentState.fresh
-        importedImage = ImportedImage(sourceName: sourceName, image: image)
-        applyDocumentState(freshState)
-        undoStack.removeAll()
-        redoStack.removeAll()
-        pendingEditSnapshot = nil
+        applyImportedImageScaleDefault()
 
         do {
-            try imageStore.save(image: image, sourceName: sourceName, documentState: freshState)
+            let project = try imageStore.createProject(
+                image: image,
+                sourceName: sourceName,
+                documentState: freshState,
+                swiftUIScale: swiftUIScale
+            )
+            applyProject(project)
+            showsProjectHome = false
+            refreshProjects()
         } catch {
-            importError = "The image was loaded, but could not be saved for next launch: \(error.localizedDescription)"
+            importError = "The image was loaded, but could not be saved as a project: \(error.localizedDescription)"
         }
     }
 
-    private func restoreLastImage() {
+    private func restoreProjects() {
         guard importedImage == nil else { return }
-        guard let storedImage = try? imageStore.load() else { return }
 
-        importedImage = storedImage.importedImage
-        applyDocumentState(normalizedDocumentState(storedImage.documentState))
+        refreshProjects()
+
+        guard let projectID = projects.first?.id,
+              let project = try? imageStore.loadProject(id: projectID)
+        else {
+            return
+        }
+
+        applyProject(project)
+    }
+
+    private func selectProject(_ projectID: UUID) {
+        guard projectID != selectedProjectID else { return }
+        guard let project = try? imageStore.loadProject(id: projectID) else {
+            refreshProjects()
+            return
+        }
+
+        applyProject(project)
+    }
+
+    private func openProject(_ projectID: UUID) {
+        if projectID != selectedProjectID {
+            selectProject(projectID)
+        }
+
+        if importedImage != nil {
+            showsProjectHome = false
+        }
+    }
+
+    private func requestSelectedProjectDeletion() {
+        guard let selectedProjectID else { return }
+        guard let project = projects.first(where: { $0.id == selectedProjectID }) else { return }
+        requestProjectDeletion(project)
+    }
+
+    private func requestProjectDeletion(_ project: ProjectSummary) {
+        projectPendingDeletion = project
+    }
+
+    private func deleteProject(_ project: ProjectSummary) {
+        do {
+            try imageStore.deleteProject(id: project.id)
+            projectPendingDeletion = nil
+            refreshProjects()
+
+            if selectedProjectID == project.id,
+               let nextProjectID = projects.first?.id,
+               let nextProject = try imageStore.loadProject(id: nextProjectID) {
+                applyProject(nextProject)
+            } else if selectedProjectID == project.id {
+                clearProject()
+            }
+
+            if projects.isEmpty {
+                showsProjectHome = true
+            }
+        } catch {
+            importError = "The project could not be deleted: \(error.localizedDescription)"
+        }
+    }
+
+    private func refreshProjects() {
+        projects = (try? imageStore.loadProjectSummaries()) ?? []
+    }
+
+    private func applyProject(_ project: StoredProject) {
+        selectedProjectID = project.id
+        importedImage = project.importedImage
+        swiftUIScale = project.swiftUIScale
+        applyDocumentState(normalizedDocumentState(project.documentState))
         undoStack.removeAll()
         redoStack.removeAll()
         pendingEditSnapshot = nil
+    }
+
+    private func clearProject() {
+        selectedProjectID = nil
+        importedImage = nil
+        applyDocumentState(.fresh)
+        undoStack.removeAll()
+        redoStack.removeAll()
+        pendingEditSnapshot = nil
+    }
+
+    private func applyImportedImageScaleDefault() {
+        #if os(iOS)
+        swiftUIScale = Double(displayScale)
+        #endif
     }
 
     private func addOverlay() {
@@ -336,10 +552,19 @@ struct ContentView: View {
     }
 
     private func saveCurrentDocumentState() {
-        guard let importedImage else { return }
+        guard let selectedProjectID, let importedImage else { return }
+        let projectName = projects.first { $0.id == selectedProjectID }?.name ?? importedImage.displayName
 
         do {
-            try imageStore.saveDocumentState(currentDocumentState, sourceName: importedImage.sourceName)
+            try imageStore.saveProject(
+                id: selectedProjectID,
+                name: projectName,
+                image: importedImage.image,
+                sourceName: importedImage.sourceName,
+                documentState: currentDocumentState,
+                swiftUIScale: swiftUIScale
+            )
+            refreshProjects()
         } catch {
             importError = "The overlay state could not be saved: \(error.localizedDescription)"
         }
@@ -377,5 +602,15 @@ struct ContentView: View {
         clamped.origin.x = min(max(0, clamped.minX), max(0, 1 - clamped.width))
         clamped.origin.y = min(max(0, clamped.minY), max(0, 1 - clamped.height))
         return clamped
+    }
+}
+
+private struct PlatformWindowFrame: ViewModifier {
+    func body(content: Content) -> some View {
+        #if os(macOS)
+        content.frame(minWidth: 940, minHeight: 620)
+        #else
+        content
+        #endif
     }
 }
