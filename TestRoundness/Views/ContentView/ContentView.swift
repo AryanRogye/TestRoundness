@@ -35,7 +35,9 @@ struct ContentView: View {
 
     var body: some View {
         #if os(iOS)
-        content
+        NavigationStack {
+            content
+        }
             .photosPicker(
                 isPresented: $isPhotoPickerPresented,
                 selection: $selectedPhotoItem,
