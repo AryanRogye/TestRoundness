@@ -1,27 +1,5 @@
 import Foundation
 
-#if os(macOS)
-import AppKit
-#elseif canImport(UIKit)
-import UIKit
-#endif
-
-struct ProjectSummary: Identifiable {
-    var id: UUID
-    var name: String
-    var sourceName: String
-    var modifiedAt: Date
-    var thumbnailImage: PlatformImage?
-}
-
-struct StoredProject {
-    var id: UUID
-    var name: String
-    var importedImage: ImportedImage
-    var documentState: RoundnessDocumentState
-    var swiftUIScale: Double
-}
-
 struct LastImageStore {
     private let imageFileName = "Image.png"
     private let metadataFileName = "Metadata.json"
@@ -282,48 +260,5 @@ struct LastImageStore {
         }
 
         return directoryURL
-    }
-}
-
-private struct ProjectMetadata: Codable {
-    var id: UUID
-    var name: String
-    var sourceName: String
-    var documentState: RoundnessDocumentState
-    var swiftUIScale: Double
-    var createdAt: Date
-    var modifiedAt: Date
-}
-
-private struct LegacyStoredImageMetadata: Codable {
-    var sourceName: String
-    var documentState: RoundnessDocumentState
-}
-
-private struct OlderLegacyStoredImageMetadata: Codable {
-    var sourceName: String
-}
-
-private extension PlatformImage {
-    static func load(contentsOf url: URL) -> PlatformImage? {
-        #if os(macOS)
-        PlatformImage(contentsOf: url)
-        #else
-        PlatformImage(contentsOfFile: url.path)
-        #endif
-    }
-
-    var pngRepresentation: Data? {
-        #if os(macOS)
-        guard let cgImage = cgImage(forProposedRect: nil, context: nil, hints: nil) else {
-            return nil
-        }
-
-        let bitmap = NSBitmapImageRep(cgImage: cgImage)
-        bitmap.size = size
-        return bitmap.representation(using: .png, properties: [:])
-        #else
-        return pngData()
-        #endif
     }
 }

@@ -1,11 +1,5 @@
 import SwiftUI
 
-#if os(macOS)
-import AppKit
-#elseif canImport(UIKit)
-import UIKit
-#endif
-
 struct ProjectHomeView: View {
     let projects: [ProjectSummary]
     let selectedProjectID: UUID?
@@ -224,25 +218,3 @@ private struct ProjectHomeRow: View {
         #endif
     }
 }
-
-private extension Color {
-    init(nsColorOrUIColor color: PlatformBackgroundColor) {
-        #if os(macOS)
-        self.init(nsColor: color)
-        #else
-        self.init(uiColor: color)
-        #endif
-    }
-}
-
-#if os(macOS)
-private typealias PlatformBackgroundColor = NSColor
-#else
-private typealias PlatformBackgroundColor = UIColor
-
-private extension UIColor {
-    static var windowBackgroundColor: UIColor {
-        .systemBackground
-    }
-}
-#endif

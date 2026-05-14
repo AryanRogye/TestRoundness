@@ -51,10 +51,12 @@ struct OverlayCanvas: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .contentShape(Rectangle())
         .trackpadPan { delta in
+            guard !isTouchPanBlocked else { return }
+            
             panOffset.width += delta.width
             panOffset.height += delta.height
         }
-
+        
         #if os(iOS)
         return surface
             .simultaneousGesture(touchPanGesture(in: availableSize))
@@ -410,12 +412,14 @@ struct OverlayCanvas: View {
     }
 
     private func normalizedDelta(_ translation: CGSize, in imageSize: CGSize) -> CGSize {
-        CGSize(
-            width: translation.width / (imageSize.width * zoomScale),
-            height: translation.height / (imageSize.height * zoomScale)
+        let speed: CGFloat = 1.75
+        
+        return CGSize(
+            width: (translation.width * speed) / (imageSize.width * zoomScale),
+            height: (translation.height * speed) / (imageSize.height * zoomScale)
         )
     }
-
+    
     private func movedRect(_ rect: CGRect, by delta: CGSize) -> CGRect {
         var candidate = rect.offsetBy(dx: delta.width, dy: delta.height)
         candidate.origin.x = min(max(0, candidate.minX), 1 - candidate.width)
@@ -486,187 +490,5 @@ struct OverlayCanvas: View {
             width: fittedSize.width,
             height: fittedSize.height
         )
-    }
-}
-
-private struct ResizeHandleView: View {
-    let handle: ResizeHandle
-    let zoomScale: CGFloat
-
-    var body: some View {
-        Circle()
-            .fill(.background)
-            .strokeBorder(Color.accentColor, lineWidth: 2 / zoomScale)
-            .frame(
-                width: handleSize / zoomScale,
-                height: handleSize / zoomScale
-            )
-            .shadow(color: .black.opacity(0.2), radius: 2 / zoomScale, y: 1 / zoomScale)
-    }
-
-    private var handleSize: CGFloat {
-        #if os(iOS)
-        handle.isCorner ? 24 : 22
-        #else
-        handle.isCorner ? 12 : 10
-        #endif
-    }
-}
-
-#if os(macOS)
-private extension View {
-    func trackpadPan(_ onPan: @escaping (CGSize) -> Void) -> some View {
-        background(TrackpadPanMonitor(onPan: onPan))
-    }
-}
-
-private struct TrackpadPanMonitor: NSViewRepresentable {
-    let onPan: (CGSize) -> Void
-
-    func makeNSView(context: Context) -> MonitoringView {
-        let view = MonitoringView()
-        view.onPan = onPan
-        return view
-    }
-
-    func updateNSView(_ nsView: MonitoringView, context: Context) {
-        nsView.onPan = onPan
-    }
-
-    final class MonitoringView: NSView {
-        var onPan: ((CGSize) -> Void)?
-        private var monitor: Any?
-
-        override func viewDidMoveToWindow() {
-            super.viewDidMoveToWindow()
-
-            if window == nil {
-                removeMonitor()
-            } else if monitor == nil {
-                installMonitor()
-            }
-        }
-
-        deinit {
-            removeMonitor()
-        }
-
-        private func installMonitor() {
-            monitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
-                guard let self, window != nil else { return event }
-
-                let point = convert(event.locationInWindow, from: nil)
-                guard bounds.contains(point), !isPointInControlsArea(point) else { return event }
-
-                let multiplier: CGFloat = event.hasPreciseScrollingDeltas ? 1 : 8
-                onPan?(
-                    CGSize(
-                        width: event.scrollingDeltaX * multiplier,
-                        height: event.scrollingDeltaY * multiplier
-                    )
-                )
-
-                return event
-            }
-        }
-
-        private func removeMonitor() {
-            if let monitor {
-                NSEvent.removeMonitor(monitor)
-                self.monitor = nil
-            }
-        }
-
-        private func isPointInControlsArea(_ point: CGPoint) -> Bool {
-            point.y > bounds.height - 72
-        }
-    }
-}
-#else
-private extension View {
-    func trackpadPan(_ onPan: @escaping (CGSize) -> Void) -> some View {
-        self
-    }
-}
-#endif
-
-private enum ResizeHandle: CaseIterable, Identifiable {
-    case topLeft
-    case top
-    case topRight
-    case right
-    case bottomRight
-    case bottom
-    case bottomLeft
-    case left
-
-    var id: Self { self }
-
-    var isCorner: Bool {
-        switch self {
-        case .topLeft, .topRight, .bottomRight, .bottomLeft:
-            return true
-        case .top, .right, .bottom, .left:
-            return false
-        }
-    }
-
-    var movesLeft: Bool {
-        self == .topLeft || self == .bottomLeft || self == .left
-    }
-
-    var movesRight: Bool {
-        self == .topRight || self == .bottomRight || self == .right
-    }
-
-    var movesTop: Bool {
-        self == .topLeft || self == .topRight || self == .top
-    }
-
-    var movesBottom: Bool {
-        self == .bottomLeft || self == .bottomRight || self == .bottom
-    }
-
-    func position(in rect: CGRect) -> CGPoint {
-        switch self {
-        case .topLeft:
-            return CGPoint(x: rect.minX, y: rect.minY)
-        case .top:
-            return CGPoint(x: rect.midX, y: rect.minY)
-        case .topRight:
-            return CGPoint(x: rect.maxX, y: rect.minY)
-        case .right:
-            return CGPoint(x: rect.maxX, y: rect.midY)
-        case .bottomRight:
-            return CGPoint(x: rect.maxX, y: rect.maxY)
-        case .bottom:
-            return CGPoint(x: rect.midX, y: rect.maxY)
-        case .bottomLeft:
-            return CGPoint(x: rect.minX, y: rect.maxY)
-        case .left:
-            return CGPoint(x: rect.minX, y: rect.midY)
-        }
-    }
-}
-
-private struct CheckerboardBackground: View {
-    var body: some View {
-        Canvas { context, size in
-            let tileSize: CGFloat = 16
-            let columns = Int(ceil(size.width / tileSize))
-            let rows = Int(ceil(size.height / tileSize))
-
-            for row in 0...rows {
-                for column in 0...columns where (row + column).isMultiple(of: 2) {
-                    let rect = CGRect(
-                        x: CGFloat(column) * tileSize,
-                        y: CGFloat(row) * tileSize,
-                        width: tileSize,
-                        height: tileSize
-                    )
-                    context.fill(Path(rect), with: .color(.primary.opacity(0.035)))
-                }
-            }
-        }
     }
 }
