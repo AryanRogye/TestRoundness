@@ -24,7 +24,6 @@ struct ContentView: View {
     @State private var showsProjectHome = true
     @State private var projectPendingDeletion: ProjectSummary?
     @AppStorage("swiftUIScale") private var swiftUIScale = 3.0
-    @Environment(\.displayScale) private var displayScale
     #if os(iOS)
     @State private var isPhotoPickerPresented = false
     @State private var selectedPhotoItem: PhotosPickerItem?
@@ -158,8 +157,6 @@ struct ContentView: View {
 
     private var editor: some View {
         RoundnessToolView(
-            projects: projects,
-            selectedProjectID: $selectedProjectID,
             importedImage: importedImage,
             overlays: $overlays,
             selectedOverlayID: $selectedOverlayID,
@@ -167,8 +164,6 @@ struct ContentView: View {
             swiftUIScale: $swiftUIScale,
             canUndo: !undoStack.isEmpty,
             canRedo: !redoStack.isEmpty,
-            onSelectProject: selectProject,
-            onDeleteSelectedProject: requestSelectedProjectDeletion,
             onImportImage: presentImageImporter,
             onPasteImage: pasteImageFromClipboard,
             onAddOverlay: addOverlay,
@@ -303,7 +298,8 @@ struct ContentView: View {
 
     private func createProject(_ image: PlatformImage, sourceName: String) {
         let freshState = RoundnessDocumentState.fresh
-        applyImportedImageScaleDefault()
+        let importedImage = ImportedImage(sourceName: sourceName, image: image)
+        swiftUIScale = importedImage.detectedSwiftUIScale
 
         do {
             let project = try imageStore.createProject(
@@ -406,13 +402,7 @@ struct ContentView: View {
         applyDocumentState(.fresh)
         undoStack.removeAll()
         redoStack.removeAll()
-        pendingEditSnapshot = nil
-    }
-
-    private func applyImportedImageScaleDefault() {
-        #if os(iOS)
-        swiftUIScale = Double(displayScale)
-        #endif
+            pendingEditSnapshot = nil
     }
 
     private func addOverlay() {

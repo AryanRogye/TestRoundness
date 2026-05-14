@@ -1,8 +1,6 @@
 import SwiftUI
 
 struct OverlayInspector: View {
-    let projects: [ProjectSummary]
-    @Binding var selectedProjectID: UUID?
     let importedImage: ImportedImage?
     @Binding var overlays: [OverlayRectangle]
     @Binding var selectedOverlayID: UUID?
@@ -10,10 +8,6 @@ struct OverlayInspector: View {
     @Binding var swiftUIScale: Double
     let canUndo: Bool
     let canRedo: Bool
-    let onSelectProject: (UUID) -> Void
-    let onDeleteSelectedProject: () -> Void
-    let onImportImage: () -> Void
-    let onPasteImage: () -> Void
     let onAddOverlay: () -> Void
     let onDeleteSelectedOverlay: () -> Void
     let onResetSelectedOverlay: () -> Void
@@ -24,60 +18,33 @@ struct OverlayInspector: View {
 
     var body: some View {
         Form {
-            Section("Projects") {
-                if projects.isEmpty {
-                    Text("No projects")
-                        .foregroundStyle(.secondary)
-                } else {
-                    Picker("Open", selection: projectSelection) {
-                        ForEach(projects) { project in
-                            Text(project.name).tag(Optional(project.id))
-                        }
-                    }
-
-                    if let project = selectedProject {
-                        LabeledContent("Updated", value: formattedDate(project.modifiedAt))
-                    }
-                }
-
-                HStack {
-                    Button {
-                        onImportImage()
-                    } label: {
-                        Label("New", systemImage: "photo.badge.plus")
-                    }
-
-                    Button {
-                        onPasteImage()
-                    } label: {
-                        Label("Paste", systemImage: "doc.on.clipboard")
-                    }
-
-                    Button(role: .destructive) {
-                        onDeleteSelectedProject()
-                    } label: {
-                        Label("Delete", systemImage: "trash")
-                    }
-                    .disabled(selectedProjectID == nil)
-                }
-            }
-
             Section("Image") {
                 if let importedImage {
                     LabeledContent("File", value: importedImage.displayName)
                     LabeledContent("Pixels", value: importedImage.pixelSizeText)
                     LabeledContent("SwiftUI Size", value: importedImage.swiftUIPointSizeText(scale: swiftUIScale))
+                    LabeledContent("Detection", value: scaleStatusText(for: importedImage))
                 } else {
                     Text("No image imported")
                         .foregroundStyle(.secondary)
                 }
 
-                Picker("Scale", selection: $swiftUIScale) {
-                    Text("1x").tag(1.0)
-                    Text("2x").tag(2.0)
-                    Text("3x").tag(3.0)
+                if let importedImage {
+                    Picker("Point Scale", selection: scaleSelection(for: importedImage)) {
+                        Text("Auto (\(scaleText(importedImage.detectedSwiftUIScale)))").tag("auto")
+                        Text("1x Override").tag("1")
+                        Text("2x Override").tag("2")
+                        Text("3x Override").tag("3")
+                    }
+                    .pickerStyle(.menu)
+                } else {
+                    Picker("Point Scale", selection: $swiftUIScale) {
+                        Text("1x").tag(1.0)
+                        Text("2x").tag(2.0)
+                        Text("3x").tag(3.0)
+                    }
+                    .pickerStyle(.segmented)
                 }
-                .pickerStyle(.segmented)
 
                 Text("Import or paste creates a new project.")
                     .font(.caption)
@@ -144,20 +111,6 @@ struct OverlayInspector: View {
         }
         .formStyle(.grouped)
         .padding(.vertical, 8)
-    }
-
-    private var selectedProject: ProjectSummary? {
-        projects.first { $0.id == selectedProjectID }
-    }
-
-    private var projectSelection: Binding<UUID?> {
-        Binding(
-            get: { selectedProjectID },
-            set: { newProjectID in
-                guard let newProjectID else { return }
-                onSelectProject(newProjectID)
-            }
-        )
     }
 
     private func overlayRow(_ overlay: OverlayRectangle) -> some View {
@@ -302,8 +255,38 @@ struct OverlayInspector: View {
         return String(format: "%.0f %@", value, suffix)
     }
 
-    private func formattedDate(_ date: Date) -> String {
-        date.formatted(date: .abbreviated, time: .shortened)
+    private func scaleSelection(for importedImage: ImportedImage) -> Binding<String> {
+        Binding(
+            get: {
+                let detectedScale = importedImage.detectedSwiftUIScale
+                if abs(swiftUIScale - detectedScale) < 0.01 {
+                    return "auto"
+                }
+
+                return String(Int(swiftUIScale.rounded()))
+            },
+            set: { selection in
+                if selection == "auto" {
+                    swiftUIScale = importedImage.detectedSwiftUIScale
+                } else if let scale = Double(selection) {
+                    swiftUIScale = scale
+                }
+            }
+        )
+    }
+
+    private func scaleStatusText(for importedImage: ImportedImage) -> String {
+        let detectedScale = importedImage.detectedSwiftUIScale
+
+        if abs(swiftUIScale - detectedScale) < 0.01 {
+            return "Auto \(scaleText(detectedScale))"
+        }
+
+        return "Manual \(scaleText(swiftUIScale)), auto \(scaleText(detectedScale))"
+    }
+
+    private func scaleText(_ scale: Double) -> String {
+        String(format: "%.0fx", scale)
     }
 
     private func radiusText(_ value: CGFloat) -> String {

@@ -1,8 +1,6 @@
 import SwiftUI
 
 struct RoundnessToolView: View {
-    let projects: [ProjectSummary]
-    @Binding var selectedProjectID: UUID?
     let importedImage: ImportedImage?
     @Binding var overlays: [OverlayRectangle]
     @Binding var selectedOverlayID: UUID?
@@ -10,8 +8,6 @@ struct RoundnessToolView: View {
     @Binding var swiftUIScale: Double
     let canUndo: Bool
     let canRedo: Bool
-    let onSelectProject: (UUID) -> Void
-    let onDeleteSelectedProject: () -> Void
     let onImportImage: () -> Void
     let onPasteImage: () -> Void
     let onAddOverlay: () -> Void
@@ -74,8 +70,6 @@ struct RoundnessToolView: View {
 
     private var inspector: some View {
         OverlayInspector(
-            projects: projects,
-            selectedProjectID: $selectedProjectID,
             importedImage: importedImage,
             overlays: $overlays,
             selectedOverlayID: $selectedOverlayID,
@@ -83,10 +77,6 @@ struct RoundnessToolView: View {
             swiftUIScale: $swiftUIScale,
             canUndo: canUndo,
             canRedo: canRedo,
-            onSelectProject: onSelectProject,
-            onDeleteSelectedProject: onDeleteSelectedProject,
-            onImportImage: onImportImage,
-            onPasteImage: onPasteImage,
             onAddOverlay: onAddOverlay,
             onDeleteSelectedOverlay: onDeleteSelectedOverlay,
             onResetSelectedOverlay: onResetSelectedOverlay,
