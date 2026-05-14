@@ -7,6 +7,7 @@ struct OverlayInspector: View {
     let importedImage: ImportedImage?
     @Binding var overlays: [OverlayRectangle]
     @Binding var selectedOverlayID: UUID?
+    @Binding var allowHoverSizingInfo: Bool
     let selectedOverlay: Binding<OverlayRectangle>?
     @Binding var swiftUIScale: Double
     @State internal var customColor: Color = .blue
@@ -53,6 +54,11 @@ struct OverlayInspector: View {
                 Text("Import or paste creates a new project.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+            }
+            
+            Section("Info") {
+                Toggle("Show Sizing Info On Hover", isOn: $allowHoverSizingInfo)
+                    .toggleStyle(.switch)
             }
 
             Section("Rectangles") {

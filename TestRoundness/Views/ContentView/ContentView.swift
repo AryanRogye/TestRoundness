@@ -22,6 +22,8 @@ struct ContentView: View {
     @State var projects: [ProjectSummary] = []
     @State var selectedProjectID: UUID?
     @State var showsProjectHome = true
+    @State var isShowingAllSizingInfo = false
+    @State var allowHoverSizingInfo = false
     @State var projectPendingDeletion: ProjectSummary?
     @AppStorage("swiftUIScale") var swiftUIScale = 3.0
     #if os(iOS)

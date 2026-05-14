@@ -4,6 +4,8 @@ struct OverlayCanvas: View {
     let importedImage: ImportedImage?
     @Binding var overlays: [OverlayRectangle]
     @Binding var selectedOverlayID: UUID?
+    @Binding var isShowingAllSizingInfo: Bool
+    @Binding var allowHoverSizingInfo: Bool
     let swiftUIScale: Double
     let onImportImage: () -> Void
     let onPasteImage: () -> Void
@@ -35,7 +37,11 @@ struct OverlayCanvas: View {
             }
         }
     }
+}
 
+// MARK: - Canvas Surface
+
+private extension OverlayCanvas {
     private func canvasSurface(in availableSize: CGSize) -> some View {
         let surface = ZStack {
             CheckerboardBackground()
@@ -52,11 +58,11 @@ struct OverlayCanvas: View {
         .contentShape(Rectangle())
         .trackpadPan { delta in
             guard !isTouchPanBlocked else { return }
-            
+
             panOffset.width += delta.width
             panOffset.height += delta.height
         }
-        
+
         #if os(iOS)
         return surface
             .simultaneousGesture(touchPanGesture(in: availableSize))
@@ -66,7 +72,11 @@ struct OverlayCanvas: View {
             .simultaneousGesture(magnificationGesture())
         #endif
     }
+}
 
+// MARK: - Empty State
+
+private extension OverlayCanvas {
     private var emptyState: some View {
         VStack(spacing: 14) {
             Image(systemName: "photo.on.rectangle.angled")
@@ -109,7 +119,11 @@ struct OverlayCanvas: View {
         }
         .keyboardShortcut("v", modifiers: .command)
     }
+}
 
+// MARK: - Image Composition
+
+private extension OverlayCanvas {
     private func imageEditor(for importedImage: ImportedImage, in availableSize: CGSize) -> some View {
         let pixelSize = importedImage.pixelSize
         let imageFrame = fittedImageFrame(imageSize: pixelSize, availableSize: availableSize)
@@ -121,7 +135,12 @@ struct OverlayCanvas: View {
                 .aspectRatio(contentMode: .fit)
                 .frame(width: imageFrame.width, height: imageFrame.height)
 
-            overlayLayer(in: imageFrame.size, pixelSize: pixelSize, zoomScale: zoomScale)
+            overlayLayer(
+                in: imageFrame.size,
+                importedImage: importedImage,
+                pixelSize: pixelSize,
+                zoomScale: zoomScale
+            )
         }
         .frame(width: imageFrame.width, height: imageFrame.height)
         .position(x: imageFrame.midX, y: imageFrame.midY)
@@ -130,6 +149,7 @@ struct OverlayCanvas: View {
 
     private func overlayLayer(
         in imageSize: CGSize,
+        importedImage: ImportedImage,
         pixelSize: CGSize,
         zoomScale: CGFloat
     ) -> some View {
@@ -138,6 +158,7 @@ struct OverlayCanvas: View {
                 if overlay.isVisible {
                     overlayView(
                         overlay: $overlay,
+                        importedImage: importedImage,
                         imageSize: imageSize,
                         pixelSize: pixelSize,
                         zoomScale: zoomScale
@@ -151,6 +172,7 @@ struct OverlayCanvas: View {
 
     private func overlayView(
         overlay: Binding<OverlayRectangle>,
+        importedImage: ImportedImage,
         imageSize: CGSize,
         pixelSize: CGSize,
         zoomScale: CGFloat
@@ -171,11 +193,42 @@ struct OverlayCanvas: View {
             )
             .fill(tint.opacity(settings.fillOpacity))
             .frame(width: rect.width, height: rect.height)
+            .overlay(alignment: .topLeading) {
+                if settings.showsRectInfo {
+                    let widthText = OverlayPointEditing.pointText(
+                        for: .width,
+                        overlay: overlay.wrappedValue,
+                        importedImage: importedImage,
+                        swiftUIScale: swiftUIScale
+                    )
+                    let heightText = OverlayPointEditing.pointText(
+                        for: .height,
+                        overlay: overlay.wrappedValue,
+                        importedImage: importedImage,
+                        swiftUIScale: swiftUIScale
+                    )
+                    
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("W \(widthText) pt")
+                        Text("H \(heightText) pt")
+                    }
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .padding(4)
+                    .background(.black.opacity(0.65), in: RoundedRectangle(cornerRadius: 5))
+                    .fixedSize()
+                    .scaleEffect(1 / zoomScale, anchor: .topLeading)
+                    .frame(width: 0, height: 0, alignment: .topLeading)
+                }
+            }
             .contentShape(Rectangle())
             .onTapGesture {
                 selectedOverlayID = overlay.wrappedValue.id
             }
             .gesture(dragGesture(overlay: overlay, in: imageSize))
+            .onHover { hovering in
+                overlay.wrappedValue.settings.showsRectInfo = isShowingAllSizingInfo || (allowHoverSizingInfo && hovering)
+            }
 
             if isSelected && showsHandles {
                 ForEach(ResizeHandle.allCases) { handle in
@@ -188,7 +241,11 @@ struct OverlayCanvas: View {
         .frame(width: rect.width, height: rect.height)
         .position(x: rect.midX, y: rect.midY)
     }
+}
 
+// MARK: - Canvas Controls
+
+private extension OverlayCanvas {
     private var canvasControls: some View {
         VStack {
             ScrollView(.horizontal, showsIndicators: false) {
@@ -248,7 +305,11 @@ struct OverlayCanvas: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .padding(16)
     }
+}
 
+// MARK: - View Navigation
+
+private extension OverlayCanvas {
     private func magnificationGesture() -> some Gesture {
         MagnificationGesture()
             .onChanged { value in
@@ -279,8 +340,12 @@ struct OverlayCanvas: View {
         isTouchPanBlocked = false
         magnifyStartScale = nil
     }
+}
 
-    #if os(iOS)
+// MARK: - Touch Panning
+
+#if os(iOS)
+private extension OverlayCanvas {
     private func touchPanGesture(in availableSize: CGSize) -> some Gesture {
         DragGesture(minimumDistance: 8)
             .onChanged { value in
@@ -355,8 +420,12 @@ struct OverlayCanvas: View {
             height: scaledSize.height
         )
     }
-    #endif
+}
+#endif
 
+// MARK: - Overlay Editing
+
+private extension OverlayCanvas {
     private func dragGesture(overlay: Binding<OverlayRectangle>, in imageSize: CGSize) -> some Gesture {
         DragGesture()
             .onChanged { value in
@@ -410,16 +479,20 @@ struct OverlayCanvas: View {
                 onEndOverlayEdit()
             }
     }
+}
 
+// MARK: - Overlay Geometry
+
+private extension OverlayCanvas {
     private func normalizedDelta(_ translation: CGSize, in imageSize: CGSize) -> CGSize {
         let speed: CGFloat = 1.75
-        
+
         return CGSize(
             width: (translation.width * speed) / (imageSize.width * zoomScale),
             height: (translation.height * speed) / (imageSize.height * zoomScale)
         )
     }
-    
+
     private func movedRect(_ rect: CGRect, by delta: CGSize) -> CGRect {
         var candidate = rect.offsetBy(dx: delta.width, dy: delta.height)
         candidate.origin.x = min(max(0, candidate.minX), 1 - candidate.width)

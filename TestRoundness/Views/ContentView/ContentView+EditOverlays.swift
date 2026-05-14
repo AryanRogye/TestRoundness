@@ -2,6 +2,15 @@ import CoreGraphics
 import Foundation
 
 extension ContentView {
+    
+    func toggleSizingInfo() {
+        /// no need for mutation because this should be in memory
+        for i in 0..<overlays.count {
+            overlays[i].settings.showsRectInfo = !isShowingAllSizingInfo
+        }
+        isShowingAllSizingInfo.toggle()
+    }
+    
     func addOverlay() {
         commitDocumentMutation {
             var overlay = OverlayRectangle.makeDefault(number: nextOverlayNumber)

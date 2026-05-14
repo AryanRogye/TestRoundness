@@ -4,6 +4,8 @@ struct RoundnessToolView: View {
     let importedImage: ImportedImage?
     @Binding var overlays: [OverlayRectangle]
     @Binding var selectedOverlayID: UUID?
+    @Binding var isShowingAllSizingInfo: Bool
+    @Binding var allowHoverSizingInfo: Bool
     let selectedOverlay: Binding<OverlayRectangle>?
     @Binding var swiftUIScale: Double
     let canUndo: Bool
@@ -60,6 +62,8 @@ struct RoundnessToolView: View {
             importedImage: importedImage,
             overlays: $overlays,
             selectedOverlayID: $selectedOverlayID,
+            isShowingAllSizingInfo: $isShowingAllSizingInfo,
+            allowHoverSizingInfo: $allowHoverSizingInfo,
             swiftUIScale: swiftUIScale,
             onImportImage: onImportImage,
             onPasteImage: onPasteImage,
@@ -73,6 +77,7 @@ struct RoundnessToolView: View {
             importedImage: importedImage,
             overlays: $overlays,
             selectedOverlayID: $selectedOverlayID,
+            allowHoverSizingInfo: $allowHoverSizingInfo,
             selectedOverlay: selectedOverlay,
             swiftUIScale: $swiftUIScale,
             canUndo: canUndo,

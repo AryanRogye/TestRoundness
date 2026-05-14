@@ -1,3 +1,10 @@
+//
+//  Color+PlatformTypes.swift
+//  TestRoundness
+//
+//  Created by Aryan Rogye on 5/14/26.
+//
+
 import SwiftUI
 
 #if os(macOS)
@@ -20,10 +27,10 @@ extension UIColor {
 
 extension Color {
     init(nsColorOrUIColor color: PlatformBackgroundColor) {
-        #if os(macOS)
+#if os(macOS)
         self.init(nsColor: color)
-        #else
+#else
         self.init(uiColor: color)
-        #endif
+#endif
     }
 }

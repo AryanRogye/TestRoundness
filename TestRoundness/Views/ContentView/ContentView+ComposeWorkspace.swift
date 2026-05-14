@@ -67,6 +67,8 @@ extension ContentView {
             importedImage: importedImage,
             overlays: $overlays,
             selectedOverlayID: $selectedOverlayID,
+            isShowingAllSizingInfo: $isShowingAllSizingInfo,
+            allowHoverSizingInfo: $allowHoverSizingInfo,
             selectedOverlay: selectedOverlayBinding,
             swiftUIScale: $swiftUIScale,
             canUndo: !undoStack.isEmpty,
@@ -106,6 +108,13 @@ extension ContentView {
         }
 
         ToolbarItemGroup(placement: .primaryAction) {
+            
+            Button {
+                toggleSizingInfo()
+            } label: {
+                Label("Show Sizing", systemImage: "info")
+            }
+            
             Button {
                 addOverlay()
             } label: {
